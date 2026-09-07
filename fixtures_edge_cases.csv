@@ -1,0 +1,11 @@
+name,company,company_size,industry,source,last_interaction_date
+Priya Nair,Nimbus Cloud,50,SaaS,Referral,
+Tom O'Brien,Cold Corp,50,SaaS,LinkedIn outreach,
+Sara Kwon,BlankSize Inc,NA,SaaS,Referral,2024-01-15
+Wei Zhang,UnknownSize LLC,Unknown,SaaS,Referral,2024-01-15
+Diego Silva,BigCo Global,"50,000",Manufacturing,Referral,2024-01-15
+,No Name Ventures,80,SaaS,Referral,2024-01-15
+Liam Fox,Odd Industry Co,80,QuantumFarming,Referral,2024-01-15
+Nora Patel,Odd Source Co,80,SaaS,Carrier pigeon,2024-01-15
+Ivy Chen,Bad Date Co,80,SaaS,Referral,not-a-date
+Max Torres,All Blank Co,NA,NA,NA,

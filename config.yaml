@@ -1,0 +1,96 @@
+# Lead Intelligence System - rubric config.
+# Every threshold here is retunable without touching code. Comments say WHY the value.
+
+reference_date:
+  # Data is ~2.5y old; using today() makes every lead maximally stale and the rubric rejects everything.
+  # Effective "today" is always max(last_interaction_date) in the input file unless overridden below.
+  override: null             # set YYYY-MM-DD to pin a reference date (e.g. replaying a historic run)
+
+weights:
+  # 4 factors (brief allows 3-5). Source and size carry most signal; industry is weakest with 26 values in 29 rows.
+  source: 0.30               # strongest intent signal available - who chased whom
+  company_size: 0.30         # only budget proxy the 6 columns give us
+  recency: 0.25              # decay matters, but a stale good-fit lead is still a lead - not the top weight
+  industry: 0.15             # long tail, mostly neutral, so it nudges rather than decides
+
+source_scores:
+  # Ranked by who initiated and how much intent the action implies. 0-10.
+  Referral: 10               # warm intro + implicit vouch - the highest-converting source in B2B SaaS
+  Inbound demo request: 9    # they asked to see the product; explicit buying intent
+  Webinar attendee: 6        # gave up an hour, above passive content but not a request to talk
+  Sales call: 5              # AMBIGUOUS: booked call or outbound cold dial - scored neutral rather than guessed
+  Content download: 4        # top-of-funnel; often a researcher or a competitor, not a buyer
+  LinkedIn outreach: 3       # we chased them; no expressed interest yet
+  _unknown: 5                # unrecognised source = neutral + flag. Never crash, never auto-reject
+  _missing: 5                # blank source is missing info, not a negative signal
+
+company_size_bands:
+  missing_score: 5            # "NA"/blank size scores NEUTRAL, never zero - unknown headcount != bad lead
+  bands:
+    # Bands matched to pricing tiers, not "bigger is better". max is inclusive.
+    - {max: 9,    score: 3,  label: solopreneur}   # below the pricing floor - no seat count, no budget
+    - {max: 50,   score: 6,  label: startup}       # can buy, but small ACV and high churn risk
+    - {max: 200,  score: 10, label: core_smb}      # the sweet spot - self-serve to mid pricing, short cycle
+    - {max: 500,  score: 9,  label: upper_smb}     # still a fast motion, slightly longer procurement
+    - {max: 2000, score: 7,  label: mid_market}    # real budget, but security review and legal add months
+    - {max: 5000, score: 5,  label: enterprise}    # different sales motion - route, don't reject
+    - {max: null, score: 3,  label: mega_enterprise} # 5000+ needs an enterprise AE; low fit for this product
+
+industry_fit:
+  # Deliberately NOT an exhaustive map: 26 industries in 29 rows means any lookup table will miss production values.
+  core: [SaaS, Software, FinTech, Cybersecurity, Analytics, Marketing, EdTech]
+  core_score: 8              # tech-forward verticals that already buy SaaS tooling - shorter education cycle
+  low_fit: [Government, Non-profit, Nonprofit, Public Sector]
+  low_fit_score: 3           # procurement cycles and grant budgets make the deal impractical, not impossible
+  _default: 5                # EVERYTHING else neutral. An unknown industry is missing info, not a negative signal
+
+recency_bands:
+  bands:
+    # Days since last_interaction_date, measured from reference_date above. max_days inclusive.
+    - {max_days: 14,   score: 10}  # inside the buying window - a rep should call this week
+    - {max_days: 30,   score: 8}   # still warm; typical B2B follow-up cadence
+    - {max_days: 60,   score: 6}   # cooling - needs a re-engagement angle
+    - {max_days: 90,   score: 4}   # a quarter of silence; priorities have likely moved
+    - {max_days: 180,  score: 3}   # cold, but budget cycles turn over - worth a nurture, not a call
+    - {max_days: null, score: 2}   # >6mo: floor at 2, not 0, so age alone can never drive a reject
+  missing_date:
+    # Same empty cell, opposite meaning - so it is scored by source, not by one blanket number.
+    high_intent_sources: [Referral, Inbound demo request]
+    high_intent_score: 8     # blank date + they asked for a demo = brand new lead, act NOW
+    default_score: 4         # blank date + outbound = never actually touched; neutral-low, not a reject
+
+thresholds:
+  # Calibrated on 29 training rows -> qualified 7/29 (24%), review 6/29 (21%), rejected 16/29 (55%).
+  # 24% vs the company's current 5% pass rate is the point of the project; 21% review = ~250 leads/mo
+  # of human work at 1200 leads/mo, which a small team can actually clear.
+  qualified_min: 8.0         # sits above the natural gap in the training distribution (8.05 -> 7.9)
+  review_min: 7.0            # below this the lead is not "too close to call", it is a no
+  # rejected = score < review_min
+
+review_upgrade_rules:
+  # A false reject is invisible and costs revenue forever; a false approve costs a rep 15 minutes.
+  upgrade_reject_on_missing_data: true   # any factor scored from missing/unknown data -> reject becomes review
+  upgrade_reject_on_unknown_source: true # unmapped source means our dictionary is stale, not that the lead is bad
+  min_flags_to_force_review: 1           # one ignorance flag is enough - the reject bar stays deliberately high
+
+priority:
+  # Rank is not the score: two 8.4s are not equally urgent.
+  sort_by: [score, freshness]  # score first, then most-recent interaction breaks ties
+  scope: qualified_and_review  # rejected leads are not ranked - nobody works that queue
+
+data_quality:
+  missing_tokens: ["", "NA", "N/A", "null", "None", "Unknown", "-"]  # spec says NA, README says blank - accept both
+  max_plausible_company_size: 1000000  # anything larger is a data-entry error; clamp + flag rather than trust it
+
+llm:
+  # Deterministic code scores every lead (reproducible, free, testable). The LLM only does two
+  # jobs, both batched, neither is scoring: review-band tiebreak, and outreach-message writing.
+  enabled: true
+  model: claude-sonnet-5
+  batch_size: 15             # 10-20 per call keeps prompts under context pressure while staying well under 1 call/lead
+  outreach_variants: 3       # brief's grading rubric asks for "2-3 unique variants" per qualified lead - rep picks one
+  sample_outreach_count: 5   # deliverable asks for "3-5 examples" surfaced in the report, not all N qualified leads
+  max_retries: 3             # covers transient 429/5xx without turning an outage into a 20-minute hang
+  backoff_seconds: 2         # exponential from here: 2, 4, 8
+  # API still down after retries -> unconditional fallback: keep the deterministic verdict, use
+  # a templated message, never crash the run. Not a config switch - there's no other valid behavior.

@@ -1,0 +1,10 @@
+[project]
+name = "lead-intelligence-system"
+version = "0.1.0"
+description = "CLI that scores, gates, ranks, and drafts outreach for inbound leads"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "PyYAML>=6.0",
+    "anthropic>=0.40.0",
+]
